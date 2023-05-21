@@ -1,0 +1,37 @@
+from flask import Flask, current_app, jsonify
+from sensors import SensorsProcess
+from multiprocessing import Queue
+
+
+class SensorsService(Flask):
+
+    def __init__(self, application, *args, **kwargs):
+        super().__init__(application)
+        self.add_url_rule('/state/get', view_func=self.get_state, methods=['GET',])
+        self.data = {}
+        self.__create_sensors_service()
+
+    def __create_sensors_service(self):
+        self.q_cmd, self.q_result = Queue(), Queue()
+        self.sensors_proc = SensorsProcess(self.q_cmd, self.q_result, debug=1)
+        self.sensors_proc.start()
+
+    def get_state(self):
+        self.q_cmd.put({'action':'state'})
+        self.data.update(self.q_result.get())
+
+        return jsonify(self.data), 200
+
+    def __del__(self):
+        self.q_cmd.put({'action':'EXIT'})
+        self.sensors_proc.join()
+
+
+if __name__ == '__main__':
+
+    sensors_app = SensorsService(__name__)
+    sensors_app.run(host='0.0.0.0', port=4995)
+
+    sensors_app.stop()
+
+
